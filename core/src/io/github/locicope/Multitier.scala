@@ -2,14 +2,15 @@ package io.github.locicope
 
 import io.circe.{Decoder, Encoder}
 import io.github.locicope.Peers.{Peer, PlacedAt, TiedToMultiple, TiedToSingle, peerRepresentation}
-import io.github.locicope.macros.PlacementMacro
 import io.github.locicope.network.Network
 import io.github.locicope.network.Reference.ResourceReference
+import io.github.locicope.network.Reference.ValueType.Value
 import ox.Ox
 import ox.flow.Flow
 
 import scala.annotation.implicitNotFound
 import scala.compiletime.erasedValue
+import scala.quoted.{Expr, Quotes, Type}
 
 /**
  * Object containing definitions for multitier applications.
@@ -110,13 +111,13 @@ object Multitier:
     /**
      * Represents a "placed computation", i.e., a function or a value that is defined in the context of the peer [[P]].
      */
-    inline def placed[P <: Peer](using Ox): PlacedBuilder[P] =
+    def placed[P <: Peer](using Ox): PlacedBuilder[P] =
       PlacedBuilder[P](using Placement.this.PeerScope[P]())
 
     /**
      * Represents a "placed value", i.e., a value defined in the context of the peer [[P]].
      */
-    inline def on[P <: Peer]: ValueBuilder[P] =
+    def on[P <: Peer]: ValueBuilder[P] =
       ValueBuilder[P]()
 
     /**
@@ -168,15 +169,15 @@ object Multitier:
 
     private def createLocal[V: Encoder, P <: Peer](value: V, peerName: String): V on P =
       val ref = registerPlaced(peerName)
-      summon[Network].registerPlaced(ref, value)
+      network.registerPlaced(ref, value)
       PlacedValue.Local(value, ref)
 
-    private def createRemote[V: Encoder, P <: Peer](peerName: String): V on P =
+    private def createRemote[V, P <: Peer](peerName: String): V on P =
       PlacedValue.Remote(registerPlaced(peerName))
 
     private def createValue[V: Encoder, P <: Peer](value: V, peerName: String): V on P =
       val ref = registerValue(peerName)
-      summon[Network].registerValue(ref, value)
+      network.registerValue(ref, value)
       PlacedValue.Value(value, ref)
 
   object Placement:
@@ -211,14 +212,12 @@ object Multitier:
     /**
      * Represents a "placed computation", i.e., a function or a value that is defined in the context of the peer [[P]].
      */
-    inline def placed[P <: Peer](using p: Placement, ox: Ox): p.PlacedBuilder[P] =
-      p.placed
+    def placed[P <: Peer](using p: Placement, ox: Ox): p.PlacedBuilder[P] = p.placed
 
     /**
      * Represents a "placed value", i.e., a value defined in the context of the peer [[P]].
      */
-    inline def on[P <: Peer](using p: Placement): p.ValueBuilder[P] =
-      p.on
+    def on[P <: Peer](using p: Placement): p.ValueBuilder[P] = p.on
 
     def multitier[V, P <: Peer](application: PlacedAt[P] ?=> V)(using network: Network, ox: Ox): V =
       network.startNetwork
