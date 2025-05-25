@@ -119,12 +119,6 @@ object Multitier:
     inline def on[P <: Peer]: ValueBuilder[P] =
       ValueBuilder[P]()
 
-//    class Foo[P <: Peer](using Ox):
-//      inline def apply[V: Encoder](inline body: => V): V on P = PlacementMacro.plcMacro[V, LocalPeer, P](body)
-
-//    inline def plc[P <: Peer](using Ox): Foo[P] =
-//      Foo[P]()
-
     /**
      * Builder for creating placed function in a multitier application.
      *
@@ -225,9 +219,6 @@ object Multitier:
      */
     inline def on[P <: Peer](using p: Placement): p.ValueBuilder[P] =
       p.on
-
-//    inline def plc[P <: Peer](using p: Placement, ox: Ox): p.Foo[P] =
-//      p.plc
 
     def multitier[V, P <: Peer](application: PlacedAt[P] ?=> V)(using network: Network, ox: Ox): V =
       network.startNetwork
