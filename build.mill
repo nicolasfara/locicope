@@ -9,7 +9,7 @@ import $ivy.`com.lihaoyi::mill-contrib-scoverage:`
 import $ivy.`com.goyeau::mill-scalafix::0.5.1`
 
 trait CommonScala extends ScalaModule with ScoverageModule with ScalafixModule {
-  def scalaVersion = "3.7.0"
+  def scalaVersion = "3.7.2-RC1-bin-20250602-4d7d383-NIGHTLY"
   def scoverageVersion = "2.1.0"
   def scalacOptions = Seq(
     "-Werror",
@@ -17,7 +17,15 @@ trait CommonScala extends ScalaModule with ScoverageModule with ScalafixModule {
     "-indent",
     "-unchecked",
     "-explain",
-    "-Xcheck-macros"
+    "-Xcheck-macros",
+    "-Xprint:cc",
+    "-Ycheck:all",
+    "-Ycc-debug",
+    "-experimental",
+    "-feature",
+    "-language:implicitConversions",
+    "-language:experimental.captureChecking",
+    "-language:experimental.pureFunctions"
   )
 
   override def ivyDeps = Agg(
@@ -41,4 +49,5 @@ object core extends CommonScala {
 
 object examples extends CommonScala {
   def moduleDeps = Seq(core)
+  override def mainClass: T[Option[String]] = Some("io.github.locicope.SimpleClientApp") // or "io.github.locicope.SimpleServerApp" for server example
 }

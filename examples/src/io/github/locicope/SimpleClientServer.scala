@@ -1,5 +1,6 @@
 package io.github.locicope
 
+import io.github.locicope.Multitier.on
 import io.github.locicope.Multitier.Placement.*
 import io.github.locicope.Peers.{Peer, PlacedAt}
 import io.github.locicope.Peers.Quantifier.Single
@@ -10,8 +11,12 @@ object SimpleClientServer:
   type Client <: { type Tie <: Single[Server] }
   type Server <: { type Tie <: Single[Client] }
 
-  inline def multitierApp[P <: Peer](using PlacedAt[P], Ox) =
-    val id = on[Client](12)
+  def multitierApp[P <: Peer](using PlacedAt[P], Ox) =
+    val id = placed[Client]:
+      println("Client ID received")
+      println("pippo")
+      val a = 10
+      12
     println(s"Client ID: $id")
     val serverValue = placed[Server]:
       val clientIdLocal = asLocal(id)

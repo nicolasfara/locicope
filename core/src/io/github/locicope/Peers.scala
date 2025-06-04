@@ -3,7 +3,7 @@ package io.github.locicope
 import io.github.locicope.Multitier.Placement
 import io.github.locicope.Peers.Quantifier.{Multiple, Single}
 
-import scala.quoted.{Expr, Quotes, Type}
+import scala.quoted.*
 
 /**
  * Object containing definitions for peers in a network.
@@ -11,6 +11,17 @@ import scala.quoted.{Expr, Quotes, Type}
  * Peers are the basic building blocks of a network, representing entities that can communicate with each other.
  */
 object Peers:
+
+  opaque type PeerRepr = PeerReprImpl
+
+  private final case class PeerReprImpl(baseTypeRepr: String, supertypes: List[String])
+
+  inline def peerRepr[T <: Peer]: PeerRepr = ${ peerReprImpl[T] }
+
+  private def peerReprImpl[T: Type](using Quotes): Expr[PeerRepr] =
+    import quotes.reflect.*
+    val baseClasses = TypeRepr.of[T].baseClasses.map(_.fullName)
+    '{ PeerReprImpl(${ Expr(baseClasses.head) }, ${ Expr(baseClasses.tail) }) }
 
   /**
    * Prototype of a peer in the network.
