@@ -5,7 +5,6 @@ import ox.*
 import ox.flow.Flow
 import sttp.client4.impl.ox.ws.asSourceAndSink
 import sttp.client4.ws.SyncWebSocket
-import sttp.client4.ws.sync.asWebSocket
 import sttp.client4.{DefaultSyncBackend, UriContext, basicRequest}
 import sttp.tapir.*
 import sttp.tapir.server.netty.sync.OxStreams
@@ -26,16 +25,16 @@ class WsNetwork(
     private val multiTied: Map[String, Set[(String, Int)]],
     private val port: Int = 8080
 ) extends Network:
-  private val flowResources = collection.concurrent.TrieMap[Int, Flow[Any]]()
-  private val valueResources = collection.concurrent.TrieMap[Int, String]() // Already encoded
+  private val flowResources = collection.concurrent.TrieMap[String, Flow[Any]]()
+  private val valueResources = collection.concurrent.TrieMap[String, String]() // Already encoded
   private val httpEndpoint = endpoint.get
     .in("values")
-    .in(query[Int]("path"))
+    .in(query[String]("path"))
     .out(stringBody)
   private val wsEndpoint = endpoint.get
     .in("flows")
-    .out(webSocketBody[Int, CodecFormat.TextPlain, String, CodecFormat.Json](OxStreams))
-  private def flowRequestPipe[V]: Pipe[Int, V] = requestedPath =>
+    .out(webSocketBody[String, CodecFormat.TextPlain, String, CodecFormat.Json](OxStreams))
+  private def flowRequestPipe[V]: Pipe[String, V] = requestedPath =>
     requestedPath.flatMap(
       flowResources.getOrElse(_, Flow.failed(new Exception("Flow not found"))).asInstanceOf[Flow[V]]
     )
@@ -44,7 +43,7 @@ class WsNetwork(
     .handleSuccess(path => valueResources.getOrElse(path, throw new Exception("Value not found")))
   private val backend = DefaultSyncBackend()
 
-  override def startNetwork(using Ox): Unit =
+  override def startNetwork(): Unit = supervised:
     NettySyncServer()
       .host("localhost")
       .port(port)
@@ -64,7 +63,7 @@ class WsNetwork(
   private def requestPeer[V: Decoder](ip: String, port: Int, request: ResourceReference)(using Ox): Option[V] = fork:
     retry(RetryConfig.backoff(10, 500.milliseconds)):
       val result = basicRequest
-        .get(uri"http://$ip:$port/values?path=${request.index}")
+        .get(uri"http://$ip:$port/values?path=${request.resourceId}")
         .response(asJson[V])
         .send(backend)
       result.body.fold(
@@ -73,17 +72,17 @@ class WsNetwork(
       )
   .join()
 
-  override def receiveFrom[V: Decoder](from: ResourceReference)(using Ox): V =
+  override def receiveFrom[V: Decoder](from: ResourceReference): V = supervised:
     singleTied
-      .get(from.peerName)
+      .get(from.onPeer)
       .flatMap((ip, port) => requestPeer(ip, port, from))
-      .getOrElse(throw new Exception(s"Possible no tie to ${from.peerName}"))
+      .getOrElse(throw new Exception(s"Possible no tie to ${from.onPeer}"))
 
-  override def receiveFromAll[V: Decoder](from: ResourceReference)(using Ox): Seq[V] =
+  override def receiveFromAll[V: Decoder](from: ResourceReference): Seq[V] = supervised:
     multiTied
-      .get(from.peerName)
+      .get(from.onPeer)
       .map(ips => par(ips.map((ip, port) => () => requestPeer(ip, port, from)).toSeq).flatten)
-      .getOrElse(throw new Exception(s"Possible no tie to ${from.peerName}"))
+      .getOrElse(throw new Exception(s"Possible no tie to ${from.onPeer}"))
 
 //  override def receiveFlowFrom[V: Decoder](from: ResourceReference)(using Ox): Flow[V] =
 //    singleTied
@@ -101,7 +100,7 @@ class WsNetwork(
 //      .getOrElse(throw new Exception(s"Possible no tie to ${from.peerName}"))
 
   override def registerValue[V: Encoder](produced: ResourceReference, value: V): Unit =
-    valueResources(produced.index) = value.asJson.toString
+    valueResources(produced.resourceId) = value.asJson.toString
 
   override def registerPlaced[V: Encoder](produced: ResourceReference, value: V): Unit =
     registerValue(produced, value) // For placed values, we register them as values

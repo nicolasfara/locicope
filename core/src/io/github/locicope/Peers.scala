@@ -1,6 +1,5 @@
 package io.github.locicope
 
-import io.github.locicope.Multitier.Placement
 import io.github.locicope.Peers.Quantifier.{Multiple, Single}
 
 import scala.quoted.*
@@ -14,24 +13,43 @@ object Peers:
 
   opaque type PeerRepr = PeerReprImpl
 
-  private final case class PeerReprImpl(baseTypeRepr: String, supertypes: List[String])
+  extension (peerRepr: PeerRepr)
+    def baseTypeRepr: String = peerRepr.baseTypeRepr
+    infix def <:<(base: PeerRepr): Boolean =
+      peerRepr.baseTypeRepr == base.baseTypeRepr || peerRepr.supertypes.contains(base.baseTypeRepr)
+
+  final private case class PeerReprImpl(baseTypeRepr: String, supertypes: List[String])
 
   inline def peerRepr[T <: Peer]: PeerRepr = ${ peerReprImpl[T] }
 
   private def peerReprImpl[T: Type](using Quotes): Expr[PeerRepr] =
     import quotes.reflect.*
-    val baseClasses = TypeRepr.of[T].baseClasses.map(_.fullName)
-    '{ PeerReprImpl(${ Expr(baseClasses.head) }, ${ Expr(baseClasses.tail) }) }
+
+    def collectBasesOfType(tpe: TypeRepr): List[Symbol] =
+      tpe match
+        case Refinement(parent, _, _) =>
+          collectBasesOfType(parent)
+        case AndType(left, right) =>
+          collectBasesOfType(left) ++ collectBasesOfType(right)
+        case _ if tpe.typeSymbol.exists =>
+          collectBasesOfSymbol(tpe.typeSymbol)
+        case _ =>
+          List.empty
+
+    def collectBasesOfSymbol(symbol: Symbol): List[Symbol] =
+      symbol.info match
+        case TypeBounds(_, hi) =>
+          symbol :: collectBasesOfType(hi)
+        case _ =>
+          List.empty
+
+    val types = collectBasesOfSymbol(TypeRepr.of[T].typeSymbol).map(_.fullName)
+    '{ PeerReprImpl(${ Expr(types.head) }, ${ Expr(types.tail) }) }
 
   /**
    * Prototype of a peer in the network.
    */
   type Peer = { type Tie }
-
-  /**
-   * Multitier application placed at a specific peer [[P]].
-   */
-  type PlacedAt[P <: Peer] = Placement { type LocalPeer = P }
 
   /**
    * Prototype of a peer in the network which is tied to a single other [[P]] peer.
@@ -66,13 +84,3 @@ object Peers:
   enum Quantifier[+P <: Peer]:
     case Single()
     case Multiple()
-
-  /**
-   * Returns the string representation of the peer type [[P]].
-   */
-  inline def peerRepresentation[P <: Peer]: String = ${ peerRepresentationImpl[P] }
-
-  private def peerRepresentationImpl[P: Type](using quotes: Quotes): Expr[String] =
-    import quotes.reflect.*
-    val re = TypeRepr.of[P].show
-    Expr(re)

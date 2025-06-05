@@ -1,17 +1,13 @@
 package io.github.locicope
 
 import io.circe.{Decoder, Encoder}
-import io.github.locicope.Peers.{Peer, PlacedAt, TiedToMultiple, TiedToSingle, peerRepresentation}
+import io.github.locicope.Peers.{Peer, PeerRepr, TiedToMultiple, TiedToSingle, peerRepr}
 import io.github.locicope.network.Network
 import io.github.locicope.network.Reference.ResourceReference
 import io.github.locicope.network.Reference.ValueType.Value
-import io.github.locicope.macros.AStHashing.* 
-import ox.Ox
-import ox.flow.Flow
+import io.github.locicope.macros.ASTHashing.*
 
 import scala.annotation.implicitNotFound
-import scala.compiletime.erasedValue
-import scala.quoted.{Expr, Quotes, Type}
 
 /**
  * Object containing definitions for multitier applications.
@@ -46,31 +42,42 @@ object Multitier:
     case Remote(resourceReference: ResourceReference)
     case Local(value: V, resourceReference: ResourceReference)
 
+  extension [V, P <: Peer](placed: V on P)
+    protected[locicope] def getReference: ResourceReference = placed match
+      case PlacedValue.Remote(resourceReference)   => resourceReference
+      case PlacedValue.Local(_, resourceReference) => resourceReference
+
   /**
    * Capability to place values in a multitier application.
    */
   @implicitNotFound("No handler found for `Placement` capability. Ensure the `multitier` is used to give the handler.")
-  trait Placement(using network: Network):
+  trait Placement(using Network):
     /**
      * Define the scope in the context of the peer [[P]].
      * @tparam P
      *   the peer type for which the scope is defined.
      */
-    class PlacedLabel[-P] extends caps.Capability
+    class PlacedLabel[+P]
+
+    protected val localPeerRepr: PeerRepr
 
     /**
      * Given a [[on]] value placed on a [[Remote]] peer, returns the value in the [[Local]] peer's context.
      *
      * This method can only be used if the [[Local]] peer has a [[Single]] tie to the [[Remote]] peer.
      */
-    def asLocal[V: Decoder, Remote <: Peer, Local <: TiedToSingle[Remote]](placed: V on Remote)(using PlacedLabel[Local]): V
+    def asLocal[V: Decoder, Remote <: Peer, Local <: TiedToSingle[Remote]](placed: V on Remote)(using
+        PlacedLabel[Local]
+    ): V
 
     /**
      * Given a [[on]] value placed on [[Remote]] peers, returns the values in the [[Local]] peer's context.
      *
      * This method can only be used if the [[Local]] peer has a [[Multiple]] tie to the [[Remote]] peers.
      */
-    def asLocalAll[V: Decoder, Remote <: Peer, Local <: TiedToMultiple[Remote]](placed: V on Remote)(using PlacedLabel[Local]): Seq[V]
+    def asLocalAll[V: Decoder, Remote <: Peer, Local <: TiedToMultiple[Remote]](placed: V on Remote)(using
+        PlacedLabel[Local]
+    ): Seq[V]
 
     /**
      * Unwrap a placed value [[placed]] in the context of its own peer [[Local]].
@@ -82,36 +89,15 @@ object Multitier:
     /**
      * Represents a "placed computation", i.e., a function or a value that is defined in the context of the peer [[P]].
      */
-    inline def placed[V: Encoder, P <: Peer](body: PlacedLabel[P] ?=> V): V on P =
+    inline def placed[V: Encoder, P <: Peer](inline body: PlacedLabel[P] ?=> V): V on P =
       given PlacedLabel[P]()
-      val hasedAst = astHash
-      ???
-
-    /**
-     * Creates a resource reference for a function placed on the peer [[peerName]].
-     */
-    protected def registerPlaced(peerName: String): ResourceReference
-
-    /**
-     * Returns the value from the placed value [[placed]] in the context of the local peer.
-     */
-    protected def returnValueFromPlaced[V: Decoder, P <: Peer](placed: V on P)(using Ox): V =
-      placed match
-        case PlacedValue.Remote(resourceReference) => network.receiveFrom(resourceReference)
-        case PlacedValue.Local(value, _)           => value
-
-    protected def returnAllValuesFromPlaced[V: Decoder, P <: Peer](placed: V on P)(using Ox): Seq[V] =
-      placed match
-        case PlacedValue.Remote(resourceReference)       => network.receiveFromAll(resourceReference)
-        case PlacedValue.Local(value, resourceReference) => network.receiveFromAll(resourceReference) :+ value
-
-    protected def createLocal[V: Encoder, P <: Peer](value: V, peerName: String): V on P =
-      val ref = registerPlaced(peerName)
-      network.registerPlaced(ref, value)
-      PlacedValue.Local(value, ref)
-
-    protected def createRemote[V, P <: Peer](peerName: String): V on P =
-      PlacedValue.Remote(registerPlaced(peerName))
+      val placementType = peerRepr[P]
+      val resourceReference = ResourceReference(hashBody(body), placementType.baseTypeRepr, Value)
+      if placementType <:< localPeerRepr then
+        val bodyValue = body
+        summon[Network].registerValue(resourceReference, bodyValue)
+        PlacedValue.Local(bodyValue, resourceReference)
+      else PlacedValue.Remote(resourceReference)
 
   object Placement:
     /**
@@ -121,7 +107,7 @@ object Multitier:
      */
     def asLocal[V: Decoder, Remote <: Peer, Local <: TiedToSingle[Remote]](placed: V on Remote)(using
         p: Placement,
-        ps: p.PlacedLabel[Local],
+        ps: p.PlacedLabel[Local]
     ): V = p.asLocal(placed)
 
     /**
@@ -143,9 +129,9 @@ object Multitier:
     /**
      * Represents a "placed computation", i.e., a function or a value that is defined in the context of the peer [[P]].
      */
-    inline def placed[P <: Peer](using p: Placement)[V: Encoder](inline body: p.PlacedLabel[P] ?=> V): V on P = p.placed[V, P](body)
+    inline def placed[P <: Peer](using p: Placement)[V: Encoder](inline body: p.PlacedLabel[P] ?=> V): V on P =
+      p.placed[V, P](body)
 
-    inline def multitier[V, P <: Peer](application: PlacedAt[P] ?=> V)(using network: Network, ox: Ox): V =
-      network.startNetwork
-      // application(using PlacementImpl[P]())
-      ???
+    inline def multitier[V, P <: Peer](application: Placement ?=> V)(using network: Network): V =
+      network.startNetwork()
+      application(using PlacementImpl[P](peerRepr[P]))

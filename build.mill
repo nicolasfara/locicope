@@ -18,13 +18,13 @@ trait CommonScala extends ScalaModule with ScoverageModule with ScalafixModule {
     "-unchecked",
     "-explain",
     "-Xcheck-macros",
-    "-Xprint:cc",
-    "-Ycheck:all",
-    "-Ycc-debug",
+//    "-Xprint:cc",
+//    "-Ycheck:all",
+//    "-Ycc-debug",
     "-experimental",
     "-feature",
     "-language:implicitConversions",
-    "-language:experimental.captureChecking",
+//    "-language:experimental.captureChecking",
     "-language:experimental.pureFunctions"
   )
 
