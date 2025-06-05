@@ -24,11 +24,12 @@ trait CommonScala extends ScalaModule with ScoverageModule with ScalafixModule {
     "-experimental",
     "-feature",
     "-language:implicitConversions",
-//    "-language:experimental.captureChecking",
+    "-language:experimental.captureChecking",
     "-language:experimental.pureFunctions"
   )
 
   override def ivyDeps = Agg(
+    ivy"org.scala-lang::scala2-library-cc-tasty-experimental:${scalaVersion()}",
     ivy"com.softwaremill.ox::core:0.5.13",
     ivy"com.softwaremill.sttp.client4::ox:4.0.7",
     ivy"com.softwaremill.sttp.client4::circe:4.0.7",
