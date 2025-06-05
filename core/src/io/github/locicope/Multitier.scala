@@ -8,6 +8,7 @@ import io.github.locicope.network.Reference.ValueType.Value
 import io.github.locicope.macros.ASTHashing.*
 
 import scala.annotation.implicitNotFound
+import scala.util.NotGiven
 
 /**
  * Object containing definitions for multitier applications.
@@ -89,7 +90,7 @@ object Multitier:
     /**
      * Represents a "placed computation", i.e., a function or a value that is defined in the context of the peer [[P]].
      */
-    inline def placed[V: Encoder, P <: Peer](inline body: PlacedLabel[P] ?=> V): V on P =
+    inline def placed[V: Encoder, P <: Peer](inline body: PlacedLabel[P] ?=> V)(using NotGiven[PlacedLabel[?]]): V on P =
       given PlacedLabel[P]()
       val placementType = peerRepr[P]
       val resourceReference = ResourceReference(hashBody(body), placementType.baseTypeRepr, Value)
@@ -129,7 +130,7 @@ object Multitier:
     /**
      * Represents a "placed computation", i.e., a function or a value that is defined in the context of the peer [[P]].
      */
-    inline def placed[P <: Peer](using p: Placement)[V: Encoder](inline body: p.PlacedLabel[P] ?=> V): V on P =
+    inline def placed[P <: Peer](using p: Placement, ng: NotGiven[p.PlacedLabel[?]])[V: Encoder](inline body: p.PlacedLabel[P] ?=> V): V on P =
       p.placed[V, P](body)
 
     inline def multitier[V, P <: Peer](application: Placement ?=> V)(using network: Network): V =

@@ -13,9 +13,8 @@ object SimpleClientServer:
   type Server <: Node { type Tie <: Single[Client] }
 
   def multitierApp[P <: Peer](using Placement, Ox): Unit =
-    val id: Int on Client = placed[Client]:
+    val id = placed[Client]:
       12
-    println(s"Client ID: $id")
     val serverValue: Int on Server = placed[Server]:
       val clientIdLocal = asLocal(id)
       clientIdLocal * 2
