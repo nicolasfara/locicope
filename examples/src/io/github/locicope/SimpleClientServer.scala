@@ -7,18 +7,20 @@ import io.github.locicope.Peers.Quantifier.Single
 import io.github.locicope.network.WsNetwork
 import ox.{ExitCode, Ox, OxApp, never}
 
+import scala.io.StdIn.readLine
+
 object SimpleClientServer:
   type Node <: { type Tie <: Single[Node] }
   type Client <: Node { type Tie <: Single[Server] }
   type Server <: Node { type Tie <: Single[Client] }
 
-  def multitierApp[P <: Peer](using Placement, Ox): Unit =
-    val id = placed[Client]:
-      12
-    val serverValue: Int on Server = placed[Server]:
-      val clientIdLocal = asLocal(id)
-      clientIdLocal * 2
-    placed[Client](println(s"Server processed value: ${asLocal(serverValue)}"))
+  private def doubleItServer(using Placement) = function[Server][Int *: EmptyTuple, Int]:
+    case input *: EmptyTuple => input * 2
+
+  def multitierApp[P <: Peer](using p: Placement): Unit = placed[Client](doubleItServer):
+    val userInput = readLine("Enter an integer: ").toInt
+    val result = doubleItServer(userInput *: EmptyTuple).asLocal
+    println(s"Doubled on server: $result")
 
 object SimpleClientApp extends OxApp:
   override def run(args: Vector[String])(using Ox): ExitCode =

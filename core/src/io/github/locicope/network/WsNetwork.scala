@@ -15,6 +15,8 @@ import sttp.client4.circe.*
 import sttp.tapir.json.circe.*
 import io.circe.syntax.*
 import io.circe.parser.decode
+import io.github.locicope.Multitier
+import io.github.locicope.Multitier.PlacedFunction
 import io.github.locicope.network.Reference.ResourceReference
 import ox.resilience.{RetryConfig, retry}
 
@@ -103,4 +105,8 @@ class WsNetwork(
     valueResources(produced.resourceId) = value.asJson.toString
 
   override def registerPlaced[V: Encoder](produced: ResourceReference, value: V): Unit =
-    registerValue(produced, value) // For placed values, we register them as values
+    registerValue(produced, value)
+
+  override def registerFunction[In <: Product: Encoder, Out: Encoder](function: PlacedFunction[?, In, Out]): Unit = ???
+
+  override def callFunction[In <: Product: Encoder, Out: Decoder](inputs: In, ref: ResourceReference): Out = ???
