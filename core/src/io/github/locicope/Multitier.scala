@@ -1,7 +1,7 @@
 package io.github.locicope
 
 import io.circe.{Decoder, Encoder}
-import io.github.locicope.Peers.{Peer, PeerRepr, TiedToMultiple, TiedToSingle, peerRepr}
+import io.github.locicope.Peers.{Peer, PeerRepr, TiedToMultiple, TiedToSingle, peer}
 import io.github.locicope.network.Network
 import io.github.locicope.network.Reference.ResourceReference
 import io.github.locicope.network.Reference.ValueType.Value
@@ -36,6 +36,7 @@ object Multitier:
    */
   sealed trait PlacedFunction[-P <: Peer, Input <: Product: Encoder, Output: {Encoder, Decoder}]:
     val peerRepr: PeerRepr
+    override def toString: String = s"PlacedFunction@${peerRepr.baseTypeRepr}"
     def apply(inputs: Input): Output on P
 
   private[locicope] class PlacedFunctionImpl[-P <: Peer, In <: Product: Encoder, Out: {Encoder, Decoder}](
@@ -102,7 +103,9 @@ object Multitier:
      */
     def asLocal[V: Decoder, Remote <: Peer, Local <: TiedToSingle[Remote]](placed: V on Remote)(using
         PlacedLabel[Local]
-    ): V
+    ): V = placed match
+      case PlacedValue.Local(value, _)           => value
+      case PlacedValue.Remote(resourceReference) => summon[Network].receiveFrom(resourceReference)
 
     /**
      * Given a [[on]] value placed on [[Remote]] peers, returns the values in the [[Local]] peer's context.
@@ -111,7 +114,9 @@ object Multitier:
      */
     def asLocalAll[V: Decoder, Remote <: Peer, Local <: TiedToMultiple[Remote]](placed: V on Remote)(using
         PlacedLabel[Local]
-    ): Seq[V]
+    ): Seq[V] = placed match
+      case PlacedValue.Local(value, _)           => Seq(value)
+      case PlacedValue.Remote(resourceReference) => summon[Network].receiveFromAll(resourceReference)
 
     /**
      * Unwrap a placed value [[placed]] in the context of its own peer [[Local]].
@@ -128,23 +133,28 @@ object Multitier:
     )(inline body: PlacedLabel[P] ?=> V)(using
         NotGiven[PlacedLabel[?]]
     ): V on P =
+      scribe.info(s"Entering placed computation on ${peer[P]}")
       given PlacedLabel[P]()
-      val placementType = peerRepr[P]
-      val resourceReference = ResourceReference(hashBody(body), placementType.baseTypeRepr, Value)
-      if placementType <:< localPeerRepr then
+      val placementType = peer[P]
+      val resourceReference = ResourceReference(hashBody(body), placementType, Value)
+      if localPeerRepr <:< placementType then
         val bodyValue = body
         summon[Network].registerValue(resourceReference, bodyValue)
         PlacedValue.Local(bodyValue, resourceReference)
       else
-        deps.filter(_.peerRepr <:< localPeerRepr).foreach(summon[Network].registerFunction(_))
+        scribe.info(s"Registering dependencies for ${localPeerRepr.baseTypeRepr}: $deps")
+        deps
+          .filter(localPeerRepr <:< _.peerRepr)
+          .tapEach(f => scribe.info(s"Registering: $f"))
+          .foreach(summon[Network].registerFunction(_))
         PlacedValue.Remote(resourceReference)
 
     inline def function[P <: Peer, In <: Product: Encoder, Out: {Encoder, Decoder}](
         body: In => Out
     ): PlacedFunction[P, In, Out] =
-      val resourceReference = ResourceReference(hashBody(body), peerRepr[P].baseTypeRepr, Value)
-      PlacedFunctionImpl[P, In, Out](peerRepr[P]) { inputs =>
-        if peerRepr[P] <:< localPeerRepr then
+      val resourceReference = ResourceReference(hashBody(body), peer[P], Value)
+      PlacedFunctionImpl[P, In, Out](peer[P]) { inputs =>
+        if localPeerRepr <:< peer[P] then
           val bodyValue = body(inputs)
           PlacedValue.Local(bodyValue, resourceReference)
         else
@@ -199,4 +209,4 @@ object Multitier:
 
     inline def multitier[V, P <: Peer](application: Placement ?=> V)(using network: Network): V =
       network.startNetwork()
-      application(using PlacementImpl[P](peerRepr[P]))
+      application(using PlacementImpl[P](peer[P]))

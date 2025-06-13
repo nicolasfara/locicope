@@ -18,9 +18,10 @@ object Peers:
     infix def <:<(base: PeerRepr): Boolean =
       peerRepr.baseTypeRepr == base.baseTypeRepr || peerRepr.supertypes.contains(base.baseTypeRepr)
 
-  final private case class PeerReprImpl(baseTypeRepr: String, supertypes: List[String])
+  final private case class PeerReprImpl(baseTypeRepr: String, supertypes: List[String]):
+    override def toString: String = s"'$baseTypeRepr'${supertypes.mkString(" <: '", ", ", "'")}"
 
-  inline def peerRepr[T <: Peer]: PeerRepr = ${ peerReprImpl[T] }
+  inline def peer[T <: Peer]: PeerRepr = ${ peerReprImpl[T] }
 
   private def peerReprImpl[T: Type](using Quotes): Expr[PeerRepr] =
     import quotes.reflect.*

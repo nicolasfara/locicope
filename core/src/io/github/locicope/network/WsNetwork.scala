@@ -15,16 +15,16 @@ import sttp.client4.circe.*
 import sttp.tapir.json.circe.*
 import io.circe.syntax.*
 import io.circe.parser.decode
-import io.github.locicope.Multitier
 import io.github.locicope.Multitier.PlacedFunction
+import io.github.locicope.Peers.PeerRepr
 import io.github.locicope.network.Reference.ResourceReference
 import ox.resilience.{RetryConfig, retry}
 
 import scala.concurrent.duration.DurationInt
 
 class WsNetwork(
-    private val singleTied: Map[String, (String, Int)],
-    private val multiTied: Map[String, Set[(String, Int)]],
+    private val singleTied: Map[PeerRepr, (String, Int)],
+    private val multiTied: Map[PeerRepr, Set[(String, Int)]],
     private val port: Int = 8080
 ) extends Network:
   private val flowResources = collection.concurrent.TrieMap[String, Flow[Any]]()
@@ -76,14 +76,14 @@ class WsNetwork(
 
   override def receiveFrom[V: Decoder](from: ResourceReference): V = supervised:
     singleTied
-      .get(from.onPeer)
-      .flatMap((ip, port) => requestPeer(ip, port, from))
+      .find(_._1 <:< from.onPeer)
+      .flatMap { case (_, (ip, port)) => requestPeer(ip, port, from) }
       .getOrElse(throw new Exception(s"Possible no tie to ${from.onPeer}"))
 
   override def receiveFromAll[V: Decoder](from: ResourceReference): Seq[V] = supervised:
     multiTied
-      .get(from.onPeer)
-      .map(ips => par(ips.map((ip, port) => () => requestPeer(ip, port, from)).toSeq).flatten)
+      .find(_._1 <:< from.onPeer)
+      .map { case (_, ips) => par(ips.map((ip, port) => () => requestPeer(ip, port, from)).toSeq).flatten }
       .getOrElse(throw new Exception(s"Possible no tie to ${from.onPeer}"))
 
 //  override def receiveFlowFrom[V: Decoder](from: ResourceReference)(using Ox): Flow[V] =
@@ -109,4 +109,6 @@ class WsNetwork(
 
   override def registerFunction[In <: Product: Encoder, Out: Encoder](function: PlacedFunction[?, In, Out]): Unit = ???
 
-  override def callFunction[In <: Product: Encoder, Out: Decoder](inputs: In, ref: ResourceReference): Out = ???
+  override def callFunction[In <: Product: Encoder, Out: Decoder](inputs: In, ref: ResourceReference): Out =
+    scribe.info(s"Hey, we are calling the function ${ref.resourceId} with inputs: ${inputs.asJson}")
+    ???
