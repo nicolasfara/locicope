@@ -17,10 +17,15 @@ object SimpleClientServer:
   private def doubleItServer(using Placement) = function[Server][Int *: EmptyTuple, Int]:
     case input *: EmptyTuple => input * 2
 
-  def multitierApp[P <: Peer](using p: Placement): Unit = placed[Client](doubleItServer):
+  private def tripleItServer(using Placement) = function[Node][Int *: EmptyTuple, Int]:
+    case input *: EmptyTuple => input * 3
+
+  def multitierApp[P <: Peer](using p: Placement): Unit = placed(doubleItServer, tripleItServer)[Client]:
     val userInput = readLine("Enter an integer: ").toInt
     val result = doubleItServer(userInput *: EmptyTuple).asLocal
     println(s"Doubled on server: $result")
+    val triple = tripleItServer(userInput *: EmptyTuple).asLocal
+    println(s"Tripled on server: $triple")
 
 object SimpleClientApp extends OxApp:
   override def run(args: Vector[String])(using Ox): ExitCode =

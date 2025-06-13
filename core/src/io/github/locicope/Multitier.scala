@@ -149,6 +149,22 @@ object Multitier:
           .foreach(summon[Network].registerFunction(_))
         PlacedValue.Remote(resourceReference)
 
+    /**
+     * Represents a "placed computation", i.e., a function or a value that is defined in the context of the peer [[P]].
+     */
+    inline def placed[V: Encoder, P <: Peer](inline body: PlacedLabel[P] ?=> V)(using
+        NotGiven[PlacedLabel[?]]
+    ): V on P =
+      scribe.info(s"Entering placed computation on ${peer[P]}")
+      given PlacedLabel[P]()
+      val placementType = peer[P]
+      val resourceReference = ResourceReference(hashBody(body), placementType, Value)
+      if localPeerRepr <:< placementType then
+        val bodyValue = body
+        summon[Network].registerValue(resourceReference, bodyValue)
+        PlacedValue.Local(bodyValue, resourceReference)
+      else PlacedValue.Remote(resourceReference)
+
     inline def function[P <: Peer, In <: Product: Encoder, Out: {Encoder, Decoder}](
         body: In => Out
     ): PlacedFunction[P, In, Out] =
@@ -192,14 +208,15 @@ object Multitier:
     /**
      * Represents a "placed computation", i.e., a function or a value that is defined in the context of the peer [[P]].
      */
+    inline def placed[I <: Product: Encoder, O: Encoder](deps: PlacedFunction[?, I, O]*)[P <: Peer](using
+        p: Placement,
+        ng: NotGiven[p.PlacedLabel[?]]
+    )[V: Encoder](inline body: p.PlacedLabel[P] ?=> V): V on P = p.placed[V, P, I, O](deps*)(body)
+
     inline def placed[P <: Peer](using
         p: Placement,
         ng: NotGiven[p.PlacedLabel[?]]
-    )[
-        V: Encoder,
-        I <: Product: Encoder,
-        O: Encoder
-    ](deps: PlacedFunction[?, I, O]*)(inline body: p.PlacedLabel[P] ?=> V): V on P = p.placed[V, P, I, O](deps*)(body)
+    )[V: Encoder](inline body: p.PlacedLabel[P] ?=> V): V on P = p.placed[V, P](body)
 
     inline def function[P <: Peer](using
         p: Placement
