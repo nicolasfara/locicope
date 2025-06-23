@@ -34,9 +34,10 @@ object Multitier:
   /**
    * Represents a function that is placed in the context of a specific peer [[P]].
    */
-  sealed trait PlacedFunction[-P <: Peer, Input <: Product: Encoder, Output: {Encoder, Decoder}]:
+  sealed trait PlacedFunction[-P <: Peer, Input <: Product: Encoder, Output: {Encoder, Decoder}] extends caps.Capability:
     val peerRepr: PeerRepr
-    override def toString: String = s"PlacedFunction@${peerRepr.baseTypeRepr}"
+    override def toString: String = s"λ@${peerRepr.baseTypeRepr}"
+
     def apply(inputs: Input): Output on P
 
   private[locicope] class PlacedFunctionImpl[-P <: Peer, In <: Product: Encoder, Out: {Encoder, Decoder}](
@@ -58,11 +59,6 @@ object Multitier:
   private enum PlacedValue[+V, -P <: Peer]:
     case Remote(resourceReference: ResourceReference)
     case Local(value: V, resourceReference: ResourceReference)
-
-  extension [V, P <: Peer](placed: V on P)
-    protected[locicope] def getReference: ResourceReference = placed match
-      case PlacedValue.Remote(resourceReference)   => resourceReference
-      case PlacedValue.Local(_, resourceReference) => resourceReference
 
   extension [V: Decoder, Remote <: Peer, Local <: TiedToSingle[Remote]](value: V on Remote)
     /**
@@ -92,7 +88,7 @@ object Multitier:
      * @tparam P
      *   the peer type for which the scope is defined.
      */
-    class PlacedLabel[+P]
+    class PlacedLabel[+P] extends caps.Capability
 
     protected val localPeerRepr: PeerRepr
 
@@ -130,7 +126,7 @@ object Multitier:
      */
     inline def placed[V: Encoder, P <: Peer, I <: Product: Encoder, O: Encoder](
         deps: PlacedFunction[?, I, O]*
-    )(inline body: PlacedLabel[P] ?=> V)(using
+    )(inline body: PlacedLabel[P] ?->{deps*} V)(using
         NotGiven[PlacedLabel[?]]
     ): V on P =
       scribe.info(s"Entering placed computation on ${peer[P]}")
@@ -211,12 +207,12 @@ object Multitier:
     inline def placed[I <: Product: Encoder, O: Encoder](deps: PlacedFunction[?, I, O]*)[P <: Peer](using
         p: Placement,
         ng: NotGiven[p.PlacedLabel[?]]
-    )[V: Encoder](inline body: p.PlacedLabel[P] ?=> V): V on P = p.placed[V, P, I, O](deps*)(body)
+    )[V: Encoder](inline body: p.PlacedLabel[P] ?->{deps*} V): V on P = p.placed[V, P, I, O](deps*)(body)
 
     inline def placed[P <: Peer](using
         p: Placement,
         ng: NotGiven[p.PlacedLabel[?]]
-    )[V: Encoder](inline body: p.PlacedLabel[P] ?=> V): V on P = p.placed[V, P](body)
+    )[V: Encoder](inline body: p.PlacedLabel[P]^ ?=> V): V on P = p.placed[V, P](body)
 
     inline def function[P <: Peer](using
         p: Placement
@@ -224,6 +220,6 @@ object Multitier:
         body: In => Out
     ): PlacedFunction[P, In, Out] = p.function[P, In, Out](body)
 
-    inline def multitier[V, P <: Peer](application: Placement ?=> V)(using network: Network): V =
+    inline def multitier[V, P <: Peer](application: Placement^ ?=> V)(using network: Network): V =
       network.startNetwork()
       application(using PlacementImpl[P](peer[P]))

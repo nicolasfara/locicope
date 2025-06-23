@@ -1,6 +1,6 @@
 package io.github.locicope
 
-import io.github.locicope.Multitier.{Placement, on}
+import io.github.locicope.Multitier.{PlacedFunction, Placement, on}
 import io.github.locicope.Multitier.Placement.*
 import io.github.locicope.Peers.{Peer, peer}
 import io.github.locicope.Peers.Quantifier.Single
@@ -20,12 +20,13 @@ object SimpleClientServer:
   private def tripleItServer(using Placement) = function[Node][Int *: EmptyTuple, Int]:
     case input *: EmptyTuple => input * 3
 
-  def multitierApp[P <: Peer](using p: Placement): Unit = placed(doubleItServer, tripleItServer)[Client]:
-    val userInput = readLine("Enter an integer: ").toInt
-    val result = doubleItServer(userInput *: EmptyTuple).asLocal
-    println(s"Doubled on server: $result")
-    val triple = tripleItServer(userInput *: EmptyTuple).asLocal
-    println(s"Tripled on server: $triple")
+  def multitierApp[P <: Peer](using p: Placement): Unit =
+    placed(doubleItServer, tripleItServer)[Client]:
+      val userInput = readLine("Enter an integer: ").toInt
+      val result = doubleItServer(userInput *: EmptyTuple).asLocal
+      println(s"Doubled on server: $result")
+      val triple = tripleItServer(userInput *: EmptyTuple).asLocal
+      println(s"Tripled on server: $triple")
 
 object SimpleClientApp extends OxApp:
   override def run(args: Vector[String])(using Ox): ExitCode =

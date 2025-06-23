@@ -12,7 +12,6 @@ object ASTHashing:
     val hashed = fletcher16Checksum(
       s"${pos.sourceFile.name}:${pos.start}:${pos.end}:${body.show}"
     ).toHexString
-//    report.error(s"Here: $hashed")
     Expr(hashed)
 
   def fletcher16Checksum(input: String): Int =
