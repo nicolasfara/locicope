@@ -1,16 +1,7 @@
-package io.github.locicope
-
-import io.github.locicope.Peers.Quantifier.{Multiple, Single}
-
+import Peer.Quantifier.{Multiple, Single}
 import scala.quoted.*
 
-/**
- * Object containing definitions for peers in a network.
- *
- * Peers are the basic building blocks of a network, representing entities that can communicate with each other.
- */
-object Peers:
-
+object Peer:
   opaque type PeerRepr = PeerReprImpl
 
   extension (peerRepr: PeerRepr)
@@ -43,8 +34,6 @@ object Peers:
           symbol :: collectBasesOfType(hi)
         case _ =>
           List.empty
-
-//    report.error("fd")
 
     val types = collectBasesOfSymbol(TypeRepr.of[T].typeSymbol).map(_.fullName)
     '{ PeerReprImpl(${ Expr(types.head) }, ${ Expr(types.tail) }) }

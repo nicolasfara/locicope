@@ -49,6 +49,9 @@ object core extends CommonScala {
   }
 }
 
+object attempt extends CommonScala {
+}
+
 object examples extends CommonScala {
   def moduleDeps = Seq(core)
   override def mainClass: T[Option[String]] = Some("io.github.locicope.SimpleClientApp") // or "io.github.locicope.SimpleServerApp" for server example
