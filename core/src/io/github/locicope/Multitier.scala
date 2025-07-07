@@ -6,6 +6,7 @@ import io.github.locicope.network.Network
 import io.github.locicope.network.Reference.ResourceReference
 import io.github.locicope.network.Reference.ValueType.Value
 import io.github.locicope.macros.ASTHashing.*
+import ox.flow.Flow
 
 import scala.annotation.implicitNotFound
 import scala.util.NotGiven
@@ -30,9 +31,10 @@ object Multitier:
    * }}}
    */
   infix opaque type on[+V, -P <: Peer] = PlacedValue[V, P]
+  infix opaque type flowOn[+V, -P <: Peer] = PlacedFlow[V, P]
 
   /**
-   * Represents a function that is placed in the context of a specific peer [[P]].
+   * Represents a function placed in the context of a specific peer [[P]].
    */
   sealed trait PlacedFunction[-P <: Peer, Input <: Product: Encoder, Output: {Encoder, Decoder}] extends caps.Capability:
     val peerRepr: PeerRepr
@@ -60,6 +62,10 @@ object Multitier:
     case Remote(resourceReference: ResourceReference)
     case Local(value: V, resourceReference: ResourceReference)
 
+  private enum PlacedFlow[+V, -P <: Peer]:
+    case RemoteFlow(resourceReference: ResourceReference)
+    case LocalFlow(value: Flow[V], resourceReference: ResourceReference)
+
   extension [V: Decoder, Remote <: Peer, Local <: TiedToSingle[Remote]](value: V on Remote)
     /**
      * Returns the value in the context of the peer [[P]].
@@ -77,6 +83,7 @@ object Multitier:
      * Unwraps the placed value in the context of its own peer [[Local]].
      */
     def unwrap(using p: Placement, ps: p.PlacedLabel[Local]): V = p.unwrap(value)
+    def ?(using p: Placement, ps: p.PlacedLabel[Local]): V = p.unwrap(value)
 
   /**
    * Capability to place values in a multitier application.
@@ -103,6 +110,12 @@ object Multitier:
       case PlacedValue.Local(value, _)           => value
       case PlacedValue.Remote(resourceReference) => summon[Network].receiveFrom(resourceReference)
 
+    def collectLocal[V: Decoder, Remote <: Peer, Local <: TiedToSingle[Remote]](placed: V flowOn Remote)(using
+        PlacedLabel[Local]
+    ): Flow[V] = placed match
+      case PlacedFlow.LocalFlow(flow, _)           => flow
+      case PlacedFlow.RemoteFlow(resourceReference) => summon[Network].receiveFromFlow(resourceReference)
+
     /**
      * Given a [[on]] value placed on [[Remote]] peers, returns the values in the [[Local]] peer's context.
      *
@@ -113,6 +126,12 @@ object Multitier:
     ): Seq[V] = placed match
       case PlacedValue.Local(value, _)           => Seq(value)
       case PlacedValue.Remote(resourceReference) => summon[Network].receiveFromAll(resourceReference)
+    
+    def collectLocalAll[V: Decoder, Remote <: Peer, Local <: TiedToMultiple[Remote]](placed: V flowOn Remote)(using
+        PlacedLabel[Local]
+    ): Flow[V] = placed match
+      case PlacedFlow.LocalFlow(flow, _)           => flow
+      case PlacedFlow.RemoteFlow(resourceReference) => summon[Network].receiveFromFlowAll(resourceReference)
 
     /**
      * Unwrap a placed value [[placed]] in the context of its own peer [[Local]].

@@ -112,3 +112,9 @@ class WsNetwork(
   override def callFunction[In <: Product: Encoder, Out: Decoder](inputs: In, ref: ResourceReference): Out =
     scribe.info(s"Hey, we are calling the function ${ref.resourceId} with inputs: ${inputs.asJson}")
     ???
+
+  override def receiveFromFlow[V: Decoder](from: ResourceReference): Flow[V] = ???
+
+  override def receiveFromFlowAll[V: Decoder](from: ResourceReference): Flow[V] = ???
+
+  override def registerFlow[V](produced: ResourceReference, value: Flow[V]): Unit = ???
